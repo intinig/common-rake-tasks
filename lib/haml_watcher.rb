@@ -1,6 +1,7 @@
 require 'rubygems'
 require 'listen'
 require 'haml'
+require 'fileutils'
 
 class HamlWatcher
   class << self
@@ -10,7 +11,7 @@ class HamlWatcher
 
       refresh
       puts ">>> HamlWatcher is watching for changes. Press Ctrl-C to Stop."
-      Listen.to(source, :filter => /\.haml$/) do |modified, added, removed|
+      Listen.to(source, :filter => /\.haml$/, :relative_paths => true) do |modified, added, removed|
         modified.each do |m|
           puts "M #{m}"
           HamlWatcher.compile(m)
@@ -28,14 +29,15 @@ class HamlWatcher
       end
     end
 
-    def output_file(filename)
-      File.join(@dest, File.basename(filename).gsub(/\.haml$/,'.html'))
+    def output_file(path)
+      File.join(@dest, path.gsub(/\.haml$/,'.html'))
     end
 
     def remove(file)
       output = output_file(file)
       begin
         File.delete output
+        FileUtils.remove_dir(File.dirname(output)) if Dir.glob(File.dirname(output) + "/*").empty?
         puts "\033[0;31m   remove\033[0m #{output}"
       rescue
         puts "\033[0;31m    error\033[0m #{output}"
@@ -44,7 +46,7 @@ class HamlWatcher
 
     def compile(file)
       output_file_name = output_file(file)
-      origin = File.open(file).read
+      origin = File.open(File.join(@source, file)).read
       begin
         result = Haml::Engine.new(origin).render
         raise if result.empty?
@@ -55,6 +57,8 @@ class HamlWatcher
       # Write rendered HTML to file
       color, action = File.exist?(output_file_name) ? [33, 'overwrite'] : [32, '   create']
       puts "\033[0;#{color}m#{action}\033[0m #{output_file_name}"
+
+      FileUtils.mkdir_p File.dirname(output_file_name)
       File.open(output_file_name,'w') {|f| f.write(result)}
     end
 
